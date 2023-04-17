@@ -29,7 +29,7 @@ def upload_document_and_create_text_bindings(file):
 
     if os.path.isdir(persist_directory):
         db = Chroma(persist_directory=persist_directory, embedding_function=llm_embeddings)
-        return file_name
+        return "state_of_the_union.txt"
 
     loader = TextLoader(file_path)
 
@@ -50,7 +50,7 @@ def upload_document_and_create_text_bindings(file):
     db = Chroma.from_documents(split_docs, llm_embeddings, persist_directory=persist_directory)
     db.persist()
 
-    return file_name
+    return "state_of_the_union.txt"
 
 
 def analyze_question(question):
