@@ -127,3 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+gpt4all-lora-quantized-ggml.bin

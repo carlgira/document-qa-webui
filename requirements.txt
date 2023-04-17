@@ -1,0 +1,8 @@
+langchain
+llama-cpp-python
+chromadb
+pypdf
+unstructured
+requests
+gradio
+jupyterlab
