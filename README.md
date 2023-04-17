@@ -15,7 +15,8 @@ pip install -r requirements.txt
 
 ## Test
 
-- Gradio
+- Gradio:
+Use the files state_of_the_union.txt or state_of_the_union.docx to test the gradio app.
 ```bash
 gradio app.py
 ```
@@ -24,3 +25,4 @@ gradio app.py
 ```bash
 jupyter-lab
 ```
+
