@@ -1,8 +1,8 @@
 langchain
-llama-cpp-python
 chromadb
 pypdf
 unstructured
 requests
 gradio
 jupyterlab
+unstructured[local-inference]

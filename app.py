@@ -1,96 +1,80 @@
-from langchain.llms import LlamaCpp
+import os
 from langchain.document_loaders import TextLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.embeddings import LlamaCppEmbeddings
 from langchain.docstore.document import Document
-from langchain.chains.question_answering import load_qa_chain
-from langchain.document_loaders import PyPDFLoader
+from langchain.document_loaders import OnlinePDFLoader
 from langchain.document_loaders import UnstructuredWordDocumentLoader
-import os
+from langchain.embeddings import HuggingFaceHubEmbeddings
+from langchain.llms import HuggingFaceHub
+from langchain.chains import RetrievalQA
 import gradio as gr
 
+os.environ['HUGGINGFACEHUB_API_TOKEN'] = 'token'
 
 chatbot = None
 db = None
-chuck_size = 500
-max_num_of_tokens = 2048
-model = "gpt4all-lora-quantized-ggml.bin"
+qa = None
+chuck_size = 300
+embeddings = HuggingFaceHubEmbeddings()
+llm = HuggingFaceHub(repo_id="google/flan-ul2", model_kwargs={"temperature":0.01, "max_new_tokens":300})
 
 
 def upload_document_and_create_text_bindings(file):
-    global db
+    global db, qa
 
     file_name = file.name.split('/')[-1]
     file_path = file.name
     persist_directory = 'db_' + file_name
 
-    llm_embeddings = LlamaCppEmbeddings(model_path=model)
-
-    if os.path.isdir(persist_directory):
-        db = Chroma(persist_directory=persist_directory, embedding_function=llm_embeddings)
-        return file_name
-
-    loader = TextLoader(file_path)
-
-    #if file_name.endswith('.pdf'):
-    #    loader = PyPDFLoader(file_path)
+    loader = None
+    
+    if file_name.endswith('.txt'):
+        loader = TextLoader(file_path)
+    
+    if file_name.endswith('.pdf'):
+        loader = OnlinePDFLoader(file_path)
 
     if file_name.endswith('.docx'):
         loader = UnstructuredWordDocumentLoader(file_path)
 
     documents = loader.load()
 
-    text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=100, separator='\n')
+    text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=50, separator='\n')
     split_docs = text_splitter.split_documents(documents)
 
-    if len(split_docs) > 20:
-        raise "Document-is-to-big.txt"
+    if os.path.isdir(persist_directory):
+        db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+    else:
+        db = Chroma.from_documents(split_docs, embeddings, persist_directory=persist_directory)
+        db.persist()
+    
+    retriever = db.as_retriever()
+    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
 
-    db = Chroma.from_documents(split_docs, llm_embeddings, persist_directory=persist_directory)
-    db.persist()
-
-    return file_name
+    return 'file-loaded.txt'
 
 
 def analyze_question(question):
-    global chatbot
-    global db
+    global chatbot, db, qa
 
     if db is None:
         return "Please upload a document first"
 
-    llm = LlamaCpp(model_path=model, n_ctx=max_num_of_tokens)
-    chain = load_qa_chain(llm, chain_type="stuff")
+    result = qa({"query": question})
 
-    docs = db.similarity_search(question)
+    docs = result['source_documents']
+        
     if len(docs) == 0:
         return "Sorry, I don't know the answer"
 
-    responses = []
-    for rdoc in docs:
-        responses.append(Document(page_content=chain.run(input_documents=[rdoc], question=question),  metadata=rdoc.metadata))
-
-    chain = load_qa_chain(llm, chain_type="stuff")
-
-    while len(responses) != 1:
-        c = 0
-        length_context = 0
-        for i in range(len(responses)):
-            count_tokens = 40 + len(question.split(' ')) + length_context + len(responses[i].page_content.split(' '))
-            if max_num_of_tokens > count_tokens:
-                length_context += len(responses[i].page_content.split(' '))
-                c += 1
-
-        responses.append(Document(page_content=chain.run(input_documents=responses[:c], question=question)))
-        responses = responses[c:]
-
-    return responses[0].page_content
+    return result['result']
 
 
-with gr.Blocks(title='Document QA with GPT4All') as demo:
-    gr.Markdown("# Document QA with GPT4All")
-    gr.Markdown("This demo uses the GPT4All model to create text embeddings for a document and then uses these embeddings to find similar documents. The similar documents are then used to answer questions")
+with gr.Blocks(title='Document QA with flan-ul2') as demo:
+    gr.Markdown("# Document QA with flan-ul2")
+    gr.Markdown("This demo uses the flan-ul2 model to create text embeddings for a document and then uses these embeddings to find similar documents. The similar documents are then used to answer questions")
     gr.Markdown("The document processing can take a while. Try with documents not bigger that 5000 words")
     gr.Markdown("## How to use it")
     gr.Markdown("Upload a document (docx or txt). Wait for the document to be processed and then ask a question you want. The answer will be displayed in the chatbot.")
