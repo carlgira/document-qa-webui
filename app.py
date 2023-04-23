@@ -9,9 +9,9 @@ from langchain.document_loaders import UnstructuredWordDocumentLoader
 from langchain.embeddings import HuggingFaceHubEmbeddings
 from langchain.llms import HuggingFaceHub
 from langchain.chains import RetrievalQA
-import gradio as gr
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
-os.environ['HUGGINGFACEHUB_API_TOKEN'] = 'token'
+flask = Flask(__name__)
 
 chatbot = None
 db = None
@@ -21,84 +21,65 @@ embeddings = HuggingFaceHubEmbeddings()
 llm = HuggingFaceHub(repo_id="google/flan-ul2", model_kwargs={"temperature":0.01, "max_new_tokens":300})
 
 
-def upload_document_and_create_text_bindings(file):
+@flask.route('/load_file', methods=['POST'])
+def load_file():
     global db, qa
+    try:
+        file = request.files['document']
+        file_name = 'docs/' + file.filename
+        
+        persist_directory ='docs/db_' + file.filename
+        
+        if not os.path.isdir(persist_directory):
+            file.save(file_name)
+        
+        loader = None
+        
+        if file_name.endswith('.txt'):
+            loader = TextLoader(file_name)
+        
+        if file_name.endswith('.pdf'):
+            loader = OnlinePDFLoader(file_name)
 
-    file_name = file.name.split('/')[-1]
-    file_path = file.name
-    persist_directory = 'db_' + file_name
+        if file_name.endswith('.docx'):
+            loader = UnstructuredWordDocumentLoader(file_name)
 
-    loader = None
-    
-    if file_name.endswith('.txt'):
-        loader = TextLoader(file_path)
-    
-    if file_name.endswith('.pdf'):
-        loader = OnlinePDFLoader(file_path)
+        documents = loader.load()
 
-    if file_name.endswith('.docx'):
-        loader = UnstructuredWordDocumentLoader(file_path)
+        text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=50, separator='\n')
+        split_docs = text_splitter.split_documents(documents)
 
-    documents = loader.load()
+        if os.path.isdir(persist_directory):
+            db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+        else:
+            db = Chroma.from_documents(split_docs, embeddings, persist_directory=persist_directory)
+            db.persist()
+        
+        retriever = db.as_retriever()
+        qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
+    except:
+        return jsonify({"status": "file not loaded"})
 
-    text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=50, separator='\n')
-    split_docs = text_splitter.split_documents(documents)
-
-    if os.path.isdir(persist_directory):
-        db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-    else:
-        db = Chroma.from_documents(split_docs, embeddings, persist_directory=persist_directory)
-        db.persist()
-    
-    retriever = db.as_retriever()
-    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
-
-    return 'file-loaded.txt'
+    return jsonify({"status": "file loaded"})
 
 
-def analyze_question(question):
+@flask.route('/query_docs', methods=['POST'])
+def query_docs():
     global chatbot, db, qa
 
+    question = request.get_json()['question']
+    
     if db is None:
-        return "Please upload a document first"
+        return jsonify({"response" : "No documents"})
 
     result = qa({"query": question})
 
     docs = result['source_documents']
         
     if len(docs) == 0:
-        return "Sorry, I don't know the answer"
+        return jsonify({"response" : "Sorry, I don't know the answer"})
 
-    return result['result']
+    return jsonify({"response" : result['result']})
 
-
-with gr.Blocks(title='Document QA with flan-ul2') as demo:
-    gr.Markdown("# Document QA with flan-ul2")
-    gr.Markdown("This demo uses the flan-ul2 model to create text embeddings for a document and then uses these embeddings to find similar documents. The similar documents are then used to answer questions")
-    gr.Markdown("The document processing can take a while. Try with documents not bigger that 5000 words")
-    gr.Markdown("## How to use it")
-    gr.Markdown("Upload a document (docx or txt). Wait for the document to be processed and then ask a question you want. The answer will be displayed in the chatbot.")
-    with gr.Row():
-        with gr.Column():
-            file_upload = gr.File()
-            upload_button = gr.UploadButton("Select Document", file_types=["txt", "pdf", "docx"])
-            upload_button.upload(upload_document_and_create_text_bindings, upload_button, file_upload)
-        with gr.Column():
-            chatbot = gr.Chatbot()
-            msg = gr.Textbox()
-            clear = gr.Button("Clear")
-
-    def user(user_message, history):
-        answer = analyze_question(user_message)
-        return "", history + [[user_message, answer]]
-
-    def bot(history):
-        return history
-
-    msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot, chatbot, chatbot
-    )
-
-    clear.click(lambda: None, None, chatbot, queue=False)
-
-demo.launch()
+if __name__ == '__main__':
+    flask.run(host='0.0.0.0', port=3000)

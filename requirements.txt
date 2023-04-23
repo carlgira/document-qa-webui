@@ -6,3 +6,4 @@ requests
 gradio
 jupyterlab
 unstructured[local-inference]
+flask
