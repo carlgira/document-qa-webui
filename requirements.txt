@@ -7,3 +7,4 @@ gradio
 jupyterlab
 unstructured[local-inference]
 flask
+opensearch-py

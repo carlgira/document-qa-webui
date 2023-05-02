@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 gpt4all-lora-quantized-ggml.bin
+.docker-env
