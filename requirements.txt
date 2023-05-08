@@ -8,3 +8,4 @@ jupyterlab
 unstructured[local-inference]
 flask
 opensearch-py
+transformers

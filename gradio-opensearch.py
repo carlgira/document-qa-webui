@@ -1,66 +1,27 @@
 import os
-from langchain.document_loaders import TextLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Chroma
-from langchain.vectorstores import OpenSearchVectorSearch
-from langchain.docstore.document import Document
-from langchain.document_loaders import OnlinePDFLoader
-from langchain.document_loaders import UnstructuredWordDocumentLoader
-from langchain.embeddings import HuggingFaceHubEmbeddings
-from langchain.llms import HuggingFaceHub
-from langchain.chains import RetrievalQA
+from backend import OpenSearchBackend
 import gradio as gr
 
-INDEX_NAME = 'docs'
-chuck_size = 300
-embeddings = HuggingFaceHubEmbeddings()
+file_name = None
 OPENSEARCH_URL = os.environ['OPENSEARCH_URL']
 
-llm = HuggingFaceHub(repo_id="OpenAssistant/oasst-sft-1-pythia-12b", model_kwargs={"temperature": 0.01, "max_new_tokens": 300})
+backed = OpenSearchBackend(OPENSEARCH_URL)
 
 
 def upload_document_and_create_text_bindings(file):
-
+    global file_name
     file_name = file.name.split('/')[-1]
     file_path = file.name
-    loader = None
-    
-    if file_name.endswith('.txt'):
-        loader = TextLoader(file_path)
-    
-    if file_name.endswith('.pdf'):
-        loader = OnlinePDFLoader(file_path)
 
-    if file_name.endswith('.docx'):
-        loader = UnstructuredWordDocumentLoader(file_path)
-
-    documents = loader.load()
-
-    text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=50, separator='\n')
-    split_docs = text_splitter.split_documents(documents)
-
-    OpenSearchVectorSearch.from_documents(split_docs, embeddings, opensearch_url=OPENSEARCH_URL, index_name=INDEX_NAME,
-                                          verify_certs=False)
+    docs = backed.read_document(file_path)
+    backed.load_doc_to_db(docs, opensearch_index=file_name, verify_certs=False)
 
     return 'file-loaded.txt'
 
 
 def analyze_question(question):
-
-    db = OpenSearchVectorSearch(index_name=INDEX_NAME, embedding_function=embeddings,
-                                opensearch_url=OPENSEARCH_URL, verify_certs=False)
-
-    retriever = db.as_retriever()
-    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
-
-    result = qa({"query": question})
-
-    docs = result['source_documents']
-
-    if len(docs) == 0:
-        return "Sorry, I don't know the answer"
-
-    return result['result']
+    global file_name
+    return backed.answer_query(question, opensearch_index=file_name, verify_certs=False)
 
 
 with gr.Blocks(title='Document QA with OpenAssistant and Opensearch') as demo:

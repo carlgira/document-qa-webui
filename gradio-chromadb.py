@@ -1,71 +1,24 @@
-import os
-from langchain.document_loaders import TextLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Chroma
-from langchain.document_loaders import OnlinePDFLoader
-from langchain.document_loaders import UnstructuredWordDocumentLoader
-from langchain.embeddings import HuggingFaceHubEmbeddings
-from langchain.llms import HuggingFaceHub
-from langchain.chains import RetrievalQA
+from backend import ChromaBacked
 import gradio as gr
 
-chatbot = None
-db = None
-qa = None
-chuck_size = 300
-embeddings = HuggingFaceHubEmbeddings()
-llm = HuggingFaceHub(repo_id="OpenAssistant/oasst-sft-1-pythia-12b", model_kwargs={"temperature": 0.01, "max_new_tokens":300})
+file_name = None
+backed = ChromaBacked()
 
 
 def upload_document_and_create_text_bindings(file):
-    global db, qa
-
+    global file_name
     file_name = file.name.split('/')[-1]
     file_path = file.name
-    persist_directory = 'db_' + file_name
 
-    loader = None
-    
-    if file_name.endswith('.txt'):
-        loader = TextLoader(file_path)
-    
-    if file_name.endswith('.pdf'):
-        loader = OnlinePDFLoader(file_path)
-
-    if file_name.endswith('.docx'):
-        loader = UnstructuredWordDocumentLoader(file_path)
-
-    documents = loader.load()
-
-    text_splitter = CharacterTextSplitter(chunk_size=chuck_size, chunk_overlap=50, separator='\n')
-    split_docs = text_splitter.split_documents(documents)
-
-    if os.path.isdir(persist_directory):
-        db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-    else:
-        db = Chroma.from_documents(split_docs, embeddings, persist_directory=persist_directory)
-        db.persist()
-    
-    retriever = db.as_retriever()
-    qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
+    docs = backed.read_document(file_path)
+    backed.load_doc_to_db(docs, file_name=file_name)
 
     return 'file-loaded.txt'
 
 
 def analyze_question(question):
-    global chatbot, db, qa
-
-    if db is None:
-        return "Please upload a document first"
-
-    result = qa({"query": question})
-
-    docs = result['source_documents']
-        
-    if len(docs) == 0:
-        return "Sorry, I don't know the answer"
-
-    return result['result']
+    global file_name
+    return backed.answer_query(question, file_name=file_name)
 
 
 with gr.Blocks(title='Document QA with OpenAssistant') as demo:
