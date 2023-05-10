@@ -1,7 +1,11 @@
 # Document QA
-This demo uses a LLM model to create text embeddings for a document and then uses these embeddings to answer question of the document. 
+This repo retrieves a LLM model to create text embeddings for a document and then uses these embeddings to answer question of the document. 
 
-It uses to save those embeddings, ChromaDB or OpenSearch
+For vectorstore it uses ChromaDB or OpenSearch.
+
+Read the medium post to get more background about the code. 
+
+## Requirements
 
 - Install the dependencies
 ```bash
@@ -68,6 +72,8 @@ docker tag <image> <ocir_docker_repository>/<ocir_namespace>/<ocir_repo_name>/do
 # Push image to repository
 docker push <ocir_docker_repository>/<ocir_namespace>/<ocir_repo_name>/documentqa-opensearch:0.0.2
 ```
+
+- Create your kubernetes cluster in OCI and follow first steps on this lab https://oracle.github.io/learning-library/oci-library/oci-hol/OKE/workshops/freetier/?lab=oke
 
 - Create a secret with the huggingface token
 ```bash
