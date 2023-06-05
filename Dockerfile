@@ -12,9 +12,12 @@ RUN pip3 install gradio
 #RUN pip3 install unstructured[local-inference]
 RUN pip3 install opensearch-py
 RUN pip3 install transformers
+RUN pip3 install pdf2image
+RUN pip3 install tabulate
 
 # Copy files
 COPY gradio-opensearch.py ./
+COPY backend.py ./
 COPY file-loaded.txt ./
 
 EXPOSE 7860

@@ -14,14 +14,14 @@ def upload_document_and_create_text_bindings(file):
     file_path = file.name
 
     docs = backed.read_document(file_path)
-    backed.load_doc_to_db(docs, opensearch_index=file_name, verify_certs=False)
+    backed.load_doc_to_db(docs, opensearch_index=file_name.lower(), verify_certs=False)
 
     return 'file-loaded.txt'
 
 
 def analyze_question(question):
     global file_name
-    return backed.answer_query(question, opensearch_index=file_name, verify_certs=False)
+    return backed.answer_query(question, opensearch_index=file_name.lower(), verify_certs=False)
 
 
 with gr.Blocks(title='Document QA with OpenAssistant and Opensearch') as demo:
